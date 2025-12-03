@@ -1,0 +1,853 @@
+openapi: 3.0.3
+info:
+  title: FitTrack API
+  version: 1.0.0
+  description: |
+    REST API сервиса для планирования тренировок, ведения упражнений, фиксации прогресса и аналитики.
+    Позволяет создавать шаблоны тренировок, планировать занятия, фиксировать выполненные подходы и отслеживать прогресс.
+
+servers:
+  - url: https://api.fittrack.example.com/v1
+    description: Production server
+  - url: http://localhost:8080/v1
+    description: Local development server
+
+paths:
+  # ==================== Аутентификация ====================
+  /register:
+    post:
+      summary: Регистрация нового пользователя
+      operationId: registerUser
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Пользователь с таким email или username уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /login:
+    post:
+      summary: Вход в систему
+      operationId: loginUser
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход, возвращается JWT-токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ==================== Пользователь ====================
+  /users/{userId}:
+    get:
+      summary: Получить профиль пользователя
+      operationId: getUser
+      tags: [User]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Частично обновить профиль текущего пользователя
+      description: Пользователь может обновить только свой профиль (userId должен совпадать с ID из токена)
+      operationId: updateUser
+      tags: [User]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Профиль успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Нельзя редактировать чужой профиль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ==================== Тренировки (шаблоны) ====================
+  /workouts:
+    post:
+      summary: Создать шаблон тренировки
+      operationId: createWorkout
+      tags: [Workout]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkoutRequest'
+      responses:
+        '201':
+          description: Тренировка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    get:
+      summary: Список шаблонов тренировок текущего пользователя
+      operationId: listWorkouts
+      tags: [Workout]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Список тренировок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workout'
+
+  /workouts/{workoutId}:
+    get:
+      summary: Получить шаблон тренировки по ID
+      operationId: getWorkout
+      tags: [Workout]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: workoutId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Тренировка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Обновить шаблон тренировки
+      operationId: updateWorkout
+      tags: [Workout]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: workoutId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkoutRequest'
+      responses:
+        '200':
+          description: Тренировка обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Удалить шаблон тренировки
+      operationId: deleteWorkout
+      tags: [Workout]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: workoutId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Тренировка удалена
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workouts/{workoutId}/exercises:
+    post:
+      summary: Добавить упражнение в шаблон тренировки
+      operationId: addExerciseToWorkout
+      tags: [Exercise]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: workoutId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        '201':
+          description: Упражнение добавлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+
+  /workouts/{workoutId}/exercises/{exerciseId}:
+    delete:
+      summary: Удалить упражнение из шаблона тренировки
+      operationId: deleteExercise
+      tags: [Exercise]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: workoutId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: exerciseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Упражнение удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Прогресс ====================
+  /progress:
+    post:
+      summary: Зафиксировать выполненную тренировку
+      operationId: logProgress
+      tags: [Progress]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProgressRequest'
+      responses:
+        '201':
+          description: Прогресс зафиксирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Progress'
+
+    get:
+      summary: История выполненных тренировок
+      operationId: getProgressHistory
+      tags: [Progress]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          description: Начало периода (включительно), формат YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Конец периода (включительно), формат YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+        - name: workoutId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: История занятий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Progress'
+
+  # ==================== Расписание ====================
+  /schedule:
+    post:
+      summary: Запланировать тренировку на конкретную дату
+      operationId: scheduleWorkout
+      tags: [Schedule]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+      responses:
+        '201':
+          description: Тренировка запланирована
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledWorkout'
+
+    get:
+      summary: Получить расписание на период
+      operationId: getSchedule
+      tags: [Schedule]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Расписание на указанный период
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduledWorkout'
+
+  /schedule/{scheduledId}:
+    delete:
+      summary: Отменить (удалить) запланированную тренировку
+      operationId: cancelScheduledWorkout
+      tags: [Schedule]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: scheduledId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Запланированная тренировка отменена
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Перенести запланированную тренировку на другую дату
+      operationId: rescheduleWorkout
+      tags: [Schedule]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: scheduledId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleRequest'
+      responses:
+        '200':
+          description: Дата изменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledWorkout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ==================== Аналитика ====================
+  /analytics/progress:
+    get:
+      summary: Аналитика прогресса по упражнениям
+      operationId: getProgressAnalytics
+      tags: [Analytics]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: exerciseId
+          in: query
+          description: Если не указан — аналитика по всем упражнениям пользователя
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [last7days, last30days, last90days, all]
+            default: last30days
+      responses:
+        '200':
+          description: Аналитика прогресса
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ProgressAnalytics'           # для одного упражнения
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/ProgressAnalytics'        # для всех
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Требуется авторизация
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT-токен
+        tokenType:
+          type: string
+          example: bearer
+        expiresIn:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 6
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    User:
+      type: object
+      required: [id, username, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        email:
+          type: string
+          format: email
+
+    Workout:
+      type: object
+      required: [id, userId, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Full Body Strength"
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateWorkoutRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+
+    UpdateWorkoutRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+
+    Exercise:
+      type: object
+      required: [id, workoutId, name, sets, reps]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workoutId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Приседания со штангой"
+        sets:
+          type: integer
+          minimum: 1
+        reps:
+          type: integer
+          minimum: 1
+        targetWeight:                     # ← переименовано и уточнено
+          type: number
+          nullable: true
+          description: Рекомендуемый / целевой вес для выполнения (кг)
+        restSeconds:
+          type: integer
+          minimum: 0
+          default: 90
+        order:
+          type: integer
+          description: Порядок выполнения в тренировке
+
+    CreateExerciseRequest:
+      type: object
+      required: [name, sets, reps]
+      properties:
+        name:
+          type: string
+        sets:
+          type: integer
+          minimum: 1
+        reps:
+          type: integer
+          minimum: 1
+        targetWeight:
+          type: number
+          nullable: true
+          description: Рекомендуемый вес (кг)
+        restSeconds:
+          type: integer
+          minimum: 0
+
+    Progress:
+      type: object
+      required: [id, workoutId, completedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        workoutId:
+          type: string
+          format: uuid
+        completedAt:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressExercise'
+
+    ProgressExercise:
+      type: object
+      required: [exerciseId]
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        completedSets:
+          type: integer
+          minimum: 0
+        completedReps:
+          type: integer
+          minimum: 0
+        weightUsed:
+          type: number
+          nullable: true
+
+    CreateProgressRequest:
+      type: object
+      required: [workoutId]
+      properties:
+        workoutId:
+          type: string
+          format: uuid
+        completedAt:
+          type: string
+          format: date-time
+          description: Если не указать — будет текущая дата/время
+        durationMinutes:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        exercises:
+          type: array
+          items:
+            type: object
+            required: [exerciseId]
+            properties:
+              exerciseId:
+                type: string
+                format: uuid
+              completedSets:
+                type: integer
+              completedReps:
+                type: integer
+              weightUsed:
+                type: number
+                nullable: true
+
+    ScheduledWorkout:
+      type: object
+      required: [id, workoutId, workoutName, scheduledDate]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workoutId:
+          type: string
+          format: uuid
+        workoutName:
+          type: string
+        scheduledDate:
+          type: string
+          format: date
+        completed:
+          type: boolean
+          default: false
+
+    ScheduleRequest:
+      type: object
+      required: [workoutId, date]
+      properties:
+        workoutId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+
+    RescheduleRequest:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+
+    ProgressAnalytics:
+      type: object
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        exerciseName:
+          type: string
+          nullable: true
+        period:
+          type: string
+        totalWorkouts:
+          type: integer
+        bestWeight:
+          type: number
+          nullable: true
+        totalVolume:
+          type: number
+        progressPercentage:
+          type: number
+          description: Процент роста от первого и последнего значения за период
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              weight:
+                type: number
+                nullable: true
+              volume:
+                type: number
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Аутентификация и регистрация
+  - name: User
+    description: Профиль пользователя
+  - name: Workout
+    description: Шаблоны тренировок
+  - name: Exercise
+    description: Упражнения в шаблонах тренировок
+  - name: Progress
+    description: Фиксация выполненных тренировок
+  - name: Schedule
+    description: Календарь и планирование
+  - name: Analytics
+    description: Статистика и аналитика прогресса
