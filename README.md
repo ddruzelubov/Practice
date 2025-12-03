@@ -48,7 +48,7 @@ git push origin homework2
 
 ```bash
 git checkout homework3
-git add homework3/
+git add homework3.yaml
 git commit -m "Added answer for third homework"
 git push origin homework3
 ```
